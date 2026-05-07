@@ -1,0 +1,30 @@
+{
+  "name": "proyecto-clinica-backend",
+  "version": "1.0.0",
+  "description": "Backend Node/Express y Java 21 para Proyecto Clinica.",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "nodemon src/server.js",
+    "start": "node src/server.js",
+    "java:compile": "node scripts/compile-java.js",
+    "java:start": "npm run java:compile && node scripts/run-java.js",
+    "dev:all": "concurrently \"npm run dev\" \"npm run java:start\""
+  },
+  "keywords": [
+    "express",
+    "java21",
+    "clinica"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "nodemon": "^3.1.14"
+  }
+}
