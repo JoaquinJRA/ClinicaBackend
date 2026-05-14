@@ -1,0 +1,202 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  YAPE
+  PLIN
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+}
+
+model Role {
+  id          Int    @id @default(autoincrement())
+  name        String @unique @db.VarChar(50)
+  description String? @db.VarChar(255)
+
+  users User[]
+
+  @@map("roles")
+}
+
+model User {
+  id         Int        @id @default(autoincrement())
+  firstName  String     @db.VarChar(100)
+  lastName   String     @db.VarChar(100)
+  email      String     @unique @db.VarChar(150)
+  password   String     @db.VarChar(255)
+  status     UserStatus @default(ACTIVE)
+
+  roleId Int
+  role   Role @relation(fields: [roleId], references: [id])
+
+  patient Patient?
+  doctor  Doctor?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+model Patient {
+  id        Int      @id @default(autoincrement())
+  dni       String   @unique @db.VarChar(15)
+  phone     String?  @db.VarChar(20)
+  address   String?  @db.VarChar(255)
+  birthDate DateTime?
+  gender    Gender
+
+  userId Int  @unique
+  user   User @relation(fields: [userId], references: [id])
+
+  appointments  Appointment[]
+  medicalRecord MedicalRecord?
+
+  @@map("patients")
+}
+
+model Doctor {
+  id            Int         @id @default(autoincrement())
+  licenseNumber String      @unique @db.VarChar(50)
+  phone         String?     @db.VarChar(20)
+  status        UserStatus  @default(ACTIVE)
+
+  userId Int  @unique
+  user   User @relation(fields: [userId], references: [id])
+
+  specialtyId Int
+  specialty   Specialty @relation(fields: [specialtyId], references: [id])
+
+  appointments Appointment[]
+
+  @@map("doctors")
+}
+
+model Specialty {
+  id          Int     @id @default(autoincrement())
+  name        String  @unique @db.VarChar(100)
+  description String? @db.VarChar(255)
+
+  doctors Doctor[]
+
+  @@map("specialties")
+}
+
+model Appointment {
+  id     Int               @id @default(autoincrement())
+  date   DateTime
+  status AppointmentStatus @default(PENDING)
+  reason String?           @db.VarChar(255)
+
+  patientId Int
+  patient   Patient @relation(fields: [patientId], references: [id])
+
+  doctorId Int
+  doctor   Doctor @relation(fields: [doctorId], references: [id])
+
+  consultation Consultation?
+  payment     Payment?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("appointments")
+}
+
+model MedicalRecord {
+  id           Int      @id @default(autoincrement())
+  generalNotes String?  @db.Text
+  createdAt    DateTime @default(now())
+
+  patientId Int     @unique
+  patient   Patient @relation(fields: [patientId], references: [id])
+
+  consultations Consultation[]
+
+  @@map("medical_records")
+}
+
+model Consultation {
+  id          Int      @id @default(autoincrement())
+  diagnosis   String   @db.Text
+  treatment   String?  @db.Text
+  notes       String?  @db.Text
+  createdAt   DateTime @default(now())
+
+  appointmentId Int         @unique
+  appointment   Appointment @relation(fields: [appointmentId], references: [id])
+
+  medicalRecordId Int
+  medicalRecord   MedicalRecord @relation(fields: [medicalRecordId], references: [id])
+
+  prescriptions Prescription[]
+
+  @@map("consultations")
+}
+
+model Prescription {
+  id          Int      @id @default(autoincrement())
+  description String   @db.Text
+  createdAt   DateTime @default(now())
+
+  consultationId Int
+  consultation   Consultation @relation(fields: [consultationId], references: [id])
+
+  @@map("prescriptions")
+}
+
+model Payment {
+  id            Int           @id @default(autoincrement())
+  amount        Decimal       @db.Decimal(10, 2)
+  paymentMethod PaymentMethod
+  status        PaymentStatus @default(PENDING)
+  createdAt     DateTime      @default(now())
+
+  appointmentId Int         @unique
+  appointment   Appointment @relation(fields: [appointmentId], references: [id])
+
+  @@map("payments")
+}

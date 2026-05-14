@@ -1,30 +1,36 @@
 {
-  "name": "proyecto-clinica-backend",
+  "name": "clinicabackend",
   "version": "1.0.0",
-  "description": "Backend Node/Express y Java 21 para Proyecto Clinica.",
-  "main": "src/server.js",
-  "scripts": {
-    "dev": "nodemon src/server.js",
-    "start": "node src/server.js",
-    "java:compile": "node scripts/compile-java.js",
-    "java:start": "npm run java:compile && node scripts/run-java.js",
-    "dev:all": "concurrently \"npm run dev\" \"npm run java:start\""
+  "main": "index.js",
+  "type": "module",
+  "prisma": {
+  "seed": "node prisma/seed.js"
   },
-  "keywords": [
-    "express",
-    "java21",
-    "clinica"
-  ],
+  "scripts": {
+    "dev": "node --env-file=.env --watch ./src/server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JoaquinJRA/ClinicaBackend.git"
+  },
+  "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/JoaquinJRA/ClinicaBackend/issues"
+  },
+  "homepage": "https://github.com/JoaquinJRA/ClinicaBackend#readme",
+  "description": "",
   "dependencies": {
-    "cors": "^2.8.6",
-    "dotenv": "^17.4.2",
-    "express": "^5.2.1"
+    "@prisma/client": "^7.8.0",
+    "bcrypt": "^6.0.0",
+    "cookie-parser": "^1.4.7",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3"
   },
   "devDependencies": {
-    "concurrently": "^9.2.1",
-    "nodemon": "^3.1.14"
+    "@types/node": "^25.7.0",
+    "prisma": "^7.8.0"
   }
 }
