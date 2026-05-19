@@ -22,9 +22,9 @@ export const register = async (req, res, next) => {
 
 export const login = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { email, contrasena } = req.body;
 
-    const result = await loginService(email, password);
+    const result = await loginService(email, contrasena);
 
     res.cookie("token", result.token, {
       httpOnly: true,
@@ -35,7 +35,7 @@ export const login = async (req, res, next) => {
 
     return res.status(200).json({
       message: "Inicio de sesión exitoso.",
-      user: result.user,
+      usuario: result.usuario,
     });
   } catch (err) {
     next(err);
