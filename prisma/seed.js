@@ -1,25 +1,23 @@
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "./client.js";
 
 async function main() {
-  await prisma.role.createMany({
+  await prisma.rol.createMany({
     data: [
       {
-        name: "ADMIN",
-        description: "Administrador del sistema",
+        nombre: "ADMIN",
+        descripcion: "Administrador del sistema",
       },
       {
-        name: "DOCTOR",
-        description: "Médico",
+        nombre: "DOCTOR",
+        descripcion: "Médico",
       },
       {
-        name: "PATIENT",
-        description: "Paciente",
+        nombre: "PACIENTE",
+        descripcion: "Paciente",
       },
       {
-        name: "RECEPTION",
-        description: "Recepción",
+        nombre: "RECEPCION",
+        descripcion: "Recepción",
       },
     ],
     skipDuplicates: true,

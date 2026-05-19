@@ -15,104 +15,105 @@ const generateToken = (payload) => {
 
 export const registerService = async (data) => {
   const {
-    firstName,
-    lastName,
+    nombre,
+    apellido,
     email,
-    password,
+    contrasena,
     dni,
-    phone,
-    address,
-    birthDate,
-    gender,
+    telefono,
+    direccion,
+    fechaNacimiento,
+    genero,
   } = data;
 
-  const existingUser = await prisma.user.findUnique({
-    where: {
-      email,
-    },
+  const existingUser = await prisma.usuario.findUnique({
+    where: { email },
   });
 
   if (existingUser) throw new ConflictError("El correo ya está registrado.");
 
-  const existingPatient = await prisma.patient.findUnique({
-    where: {
-      dni,
-    },
+  const existingPaciente = await prisma.paciente.findUnique({
+    where: { dni },
   });
 
-  if (existingPatient) throw new ConflictError("El DNI ya está registrado.");
+  if (existingPaciente) throw new ConflictError("El DNI ya está registrado.");
 
-  const patientRole = await prisma.role.findUnique({
-    where: {
-      name: "PATIENT",
-    },
+  const rolPaciente = await prisma.rol.findUnique({
+    where: { nombre: "PACIENTE" },
   });
 
-  if (!patientRole)
-    throw new BadRequestError("No existe el rol PATIENT en la base de datos.");
+  if (!rolPaciente)
+    throw new BadRequestError("No existe el rol PACIENTE en la base de datos.");
 
-  const hashedPassword = await bcrypt.hash(password, 10);
+  const contrasenaHash = await bcrypt.hash(contrasena, 10);
 
-  const user = await prisma.user.create({
+  const usuario = await prisma.usuario.create({
     data: {
-      firstName,
-      lastName,
+      nombre,
+      apellido,
       email,
-      password: hashedPassword,
-      roleId: patientRole.id,
+      contrasena: contrasenaHash,
+      rolId: rolPaciente.id,
 
-      patient: {
+      paciente: {
         create: {
           dni,
-          phone,
-          address,
-          birthDate: birthDate ? new Date(birthDate) : null,
-          gender,
+          telefono,
+          direccion,
+          fechaNacimiento: fechaNacimiento ? new Date(fechaNacimiento) : null,
+          genero,
         },
       },
     },
     include: {
-      role: true,
-      patient: true,
+      rol: true,
+      paciente: true,
     },
   });
 
   const token = generateToken({
-    id: user.id,
-    role: user.role.name,
+    id: usuario.id,
+    rol: usuario.rol.nombre,
   });
 
   return {
     token,
-    user: {
-      id: user.id,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      email: user.email,
-      role: user.role.name,
+    usuario: {
+      id: usuario.id,
+      nombre: usuario.nombre,
+      apellido: usuario.apellido,
+      email: usuario.email,
+      rol: usuario.rol.nombre,
     },
   };
 };
 
-export const loginService = async (email, password) => {
-  const user = await prisma.user.findUnique({
-    where: {
-      email,
-    },
-    include: {
-      role: true,
-    },
+export const loginService = async (email, contrasena) => {
+  const usuario = await prisma.usuario.findUnique({
+    where: { email },
+    include: { rol: true },
   });
 
-  if (!user) throw new UnauthorizedError("Correo o contraseña incorrectos.");
+  if (!usuario) throw new UnauthorizedError("Correo o contraseña incorrectos.");
 
-  const isPasswordValid = await bcrypt.compare(password, user.password);
+  const contrasenaValida = await bcrypt.compare(contrasena, usuario.contrasena);
 
-  if (!isPasswordValid)
+  if (!contrasenaValida)
     throw new UnauthorizedError("Correo o contraseña incorrectos.");
 
   const token = generateToken({
-    id: user.id,
-    role: user.role.name,
+    id: usuario.id,
+    rol: usuario.rol.nombre,
   });
+
+  return {
+    token,
+    usuario: {
+      id: usuario.id,
+      nombre: usuario.nombre,
+      apellido: usuario.apellido,
+      email: usuario.email,
+      rol: usuario.rol.nombre,
+    },
+  };
 };
