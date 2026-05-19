@@ -1,11 +1,11 @@
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import prisma from "../models/db.js";
 import {
   BadRequestError,
   ConflictError,
   UnauthorizedError,
 } from "../utils/appError.js";
+import { prisma } from "../../prisma/client.js";
 
 const generateToken = (payload) => {
   return jwt.sign(payload, process.env.JWT_SECRET, {

@@ -1,4 +1,4 @@
-import { ForbiddenError, UnauthorizedError } from "../utils/appError";
+import { ForbiddenError, UnauthorizedError } from "../utils/appError.js";
 import jwt from "jsonwebtoken";
 
 export const verifySession = async (req, _res, next) => {
