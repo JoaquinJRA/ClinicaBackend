@@ -15,10 +15,6 @@ async function main() {
         nombre: "PACIENTE",
         descripcion: "Paciente",
       },
-      {
-        nombre: "RECEPCION",
-        descripcion: "Recepción",
-      },
     ],
     skipDuplicates: true,
   });
