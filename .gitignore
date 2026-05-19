@@ -6,3 +6,5 @@ dist/
 .dev-logs/
 
 /src/generated/prisma
+
+/src/generated/prisma

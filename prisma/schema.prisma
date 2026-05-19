@@ -1,202 +1,200 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
-generator client {
-  provider = "prisma-client"
-}
-
-datasource db {
-  provider = "postgresql"
-}
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
 generator client {
   provider = "prisma-client-js"
 }
 
+
 datasource db {
-  provider = "mysql"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-enum UserStatus {
-  ACTIVE
-  INACTIVE
+// ─── Enums ───────────────────────────────────────────────
+
+enum EstadoUsuario {
+  ACTIVO
+  INACTIVO
 }
 
-enum Gender {
-  MALE
-  FEMALE
-  OTHER
+enum Genero {
+  MASCULINO
+  FEMENINO
+  OTRO
 }
 
-enum AppointmentStatus {
-  PENDING
-  CONFIRMED
-  CANCELLED
-  COMPLETED
+enum EstadoCita {
+  PENDIENTE
+  CONFIRMADA
+  CANCELADA
+  COMPLETADA
 }
 
-enum PaymentMethod {
-  CASH
-  CARD
+enum MetodoPago {
+  EFECTIVO
+  TARJETA
   YAPE
   PLIN
 }
 
-enum PaymentStatus {
-  PENDING
-  PAID
-  FAILED
+enum EstadoPago {
+  PENDIENTE
+  PAGADO
+  FALLIDO
 }
 
-model Role {
-  id          Int    @id @default(autoincrement())
-  name        String @unique @db.VarChar(50)
-  description String? @db.VarChar(255)
+// ─── Modelos ─────────────────────────────────────────────
 
-  users User[]
+model Rol {
+  id          Int     @id @default(autoincrement())
+  nombre      String  @unique @db.VarChar(50)
+  descripcion String? @db.VarChar(255)
+
+  usuarios Usuario[]
 
   @@map("roles")
 }
 
-model User {
-  id         Int        @id @default(autoincrement())
-  firstName  String     @db.VarChar(100)
-  lastName   String     @db.VarChar(100)
-  email      String     @unique @db.VarChar(150)
-  password   String     @db.VarChar(255)
-  status     UserStatus @default(ACTIVE)
+model Usuario {
+  id        Int           @id @default(autoincrement())
+  nombre    String        @db.VarChar(100)
+  apellido  String        @db.VarChar(100)
+  email     String        @unique @db.VarChar(150)
+  contrasena String       @db.VarChar(255)
+  estado    EstadoUsuario @default(ACTIVO)
 
-  roleId Int
-  role   Role @relation(fields: [roleId], references: [id])
+  rolId Int
+  rol   Rol @relation(fields: [rolId], references: [id])
 
-  patient Patient?
-  doctor  Doctor?
+  paciente Paciente?
+  medico   Medico?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  creadoEn       DateTime @default(now())
+  actualizadoEn  DateTime @updatedAt
 
-  @@map("users")
+  @@map("usuarios")
 }
 
-model Patient {
-  id        Int      @id @default(autoincrement())
-  dni       String   @unique @db.VarChar(15)
-  phone     String?  @db.VarChar(20)
-  address   String?  @db.VarChar(255)
-  birthDate DateTime?
-  gender    Gender
+model Paciente {
+  id           Int       @id @default(autoincrement())
+  dni          String    @unique @db.VarChar(15)
+  telefono     String?   @db.VarChar(20)
+  direccion    String?   @db.VarChar(255)
+  fechaNacimiento DateTime?
+  genero       Genero
 
-  userId Int  @unique
-  user   User @relation(fields: [userId], references: [id])
+  usuarioId Int     @unique
+  usuario   Usuario @relation(fields: [usuarioId], references: [id])
 
-  appointments  Appointment[]
-  medicalRecord MedicalRecord?
+  citas           Cita[]
+  historialMedico HistorialMedico?
 
-  @@map("patients")
+  @@map("pacientes")
 }
 
-model Doctor {
-  id            Int         @id @default(autoincrement())
-  licenseNumber String      @unique @db.VarChar(50)
-  phone         String?     @db.VarChar(20)
-  status        UserStatus  @default(ACTIVE)
+model Medico {
+  id             Int           @id @default(autoincrement())
+  numeroColegiatura String     @unique @db.VarChar(50)
+  telefono       String?       @db.VarChar(20)
+  estado         EstadoUsuario @default(ACTIVO)
 
-  userId Int  @unique
-  user   User @relation(fields: [userId], references: [id])
+  usuarioId Int     @unique
+  usuario   Usuario @relation(fields: [usuarioId], references: [id])
 
-  specialtyId Int
-  specialty   Specialty @relation(fields: [specialtyId], references: [id])
+  especialidadId Int
+  especialidad   Especialidad @relation(fields: [especialidadId], references: [id])
 
-  appointments Appointment[]
+  citas Cita[]
 
-  @@map("doctors")
+  @@map("medicos")
 }
 
-model Specialty {
+model Especialidad {
   id          Int     @id @default(autoincrement())
-  name        String  @unique @db.VarChar(100)
-  description String? @db.VarChar(255)
+  nombre      String  @unique @db.VarChar(100)
+  descripcion String? @db.VarChar(255)
 
-  doctors Doctor[]
+  medicos Medico[]
 
-  @@map("specialties")
+  @@map("especialidades")
 }
 
-model Appointment {
-  id     Int               @id @default(autoincrement())
-  date   DateTime
-  status AppointmentStatus @default(PENDING)
-  reason String?           @db.VarChar(255)
+model Cita {
+  id     Int        @id @default(autoincrement())
+  fecha  DateTime
+  estado EstadoCita @default(PENDIENTE)
+  motivo String?    @db.VarChar(255)
 
-  patientId Int
-  patient   Patient @relation(fields: [patientId], references: [id])
+  pacienteId Int
+  paciente   Paciente @relation(fields: [pacienteId], references: [id])
 
-  doctorId Int
-  doctor   Doctor @relation(fields: [doctorId], references: [id])
+  medicoId Int
+  medico   Medico @relation(fields: [medicoId], references: [id])
 
-  consultation Consultation?
-  payment     Payment?
+  consulta Consulta?
+  pago     Pago?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
 
-  @@map("appointments")
+  @@map("citas")
 }
 
-model MedicalRecord {
-  id           Int      @id @default(autoincrement())
-  generalNotes String?  @db.Text
-  createdAt    DateTime @default(now())
+model HistorialMedico {
+  id            Int      @id @default(autoincrement())
+  notasGenerales String? @db.Text
+  creadoEn      DateTime @default(now())
 
-  patientId Int     @unique
-  patient   Patient @relation(fields: [patientId], references: [id])
+  pacienteId Int     @unique
+  paciente   Paciente @relation(fields: [pacienteId], references: [id])
 
-  consultations Consultation[]
+  consultas Consulta[]
 
-  @@map("medical_records")
+  @@map("historial_medico")
 }
 
-model Consultation {
+model Consulta {
   id          Int      @id @default(autoincrement())
-  diagnosis   String   @db.Text
-  treatment   String?  @db.Text
-  notes       String?  @db.Text
-  createdAt   DateTime @default(now())
+  diagnostico String   @db.Text
+  tratamiento String?  @db.Text
+  notas       String?  @db.Text
+  creadoEn    DateTime @default(now())
 
-  appointmentId Int         @unique
-  appointment   Appointment @relation(fields: [appointmentId], references: [id])
+  citaId Int  @unique
+  cita   Cita @relation(fields: [citaId], references: [id])
 
-  medicalRecordId Int
-  medicalRecord   MedicalRecord @relation(fields: [medicalRecordId], references: [id])
+  historialMedicoId Int
+  historialMedico   HistorialMedico @relation(fields: [historialMedicoId], references: [id])
 
-  prescriptions Prescription[]
+  recetas Receta[]
 
-  @@map("consultations")
+  @@map("consultas")
 }
 
-model Prescription {
+model Receta {
   id          Int      @id @default(autoincrement())
-  description String   @db.Text
-  createdAt   DateTime @default(now())
+  descripcion String   @db.Text
+  creadoEn    DateTime @default(now())
 
-  consultationId Int
-  consultation   Consultation @relation(fields: [consultationId], references: [id])
+  consultaId Int
+  consulta   Consulta @relation(fields: [consultaId], references: [id])
 
-  @@map("prescriptions")
+  @@map("recetas")
 }
 
-model Payment {
-  id            Int           @id @default(autoincrement())
-  amount        Decimal       @db.Decimal(10, 2)
-  paymentMethod PaymentMethod
-  status        PaymentStatus @default(PENDING)
-  createdAt     DateTime      @default(now())
+model Pago {
+  id           Int        @id @default(autoincrement())
+  monto        Decimal    @db.Decimal(10, 2)
+  metodoPago   MetodoPago
+  estado       EstadoPago @default(PENDIENTE)
+  creadoEn     DateTime   @default(now())
 
-  appointmentId Int         @unique
-  appointment   Appointment @relation(fields: [appointmentId], references: [id])
+  citaId Int  @unique
+  cita   Cita @relation(fields: [citaId], references: [id])
 
-  @@map("payments")
+  @@map("pagos")
 }
