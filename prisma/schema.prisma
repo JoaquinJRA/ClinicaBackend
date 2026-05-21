@@ -67,6 +67,10 @@ model Usuario {
   contrasena String       @db.VarChar(255)
   estado    EstadoUsuario @default(ACTIVO)
 
+  emailVerificado      Boolean   @default(false)
+  tokenVerificacion    String?   @unique @db.VarChar(255)
+  tokenVerificacionExp DateTime?
+
   rolId Int
   rol   Rol @relation(fields: [rolId], references: [id])
 
