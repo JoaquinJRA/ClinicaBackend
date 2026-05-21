@@ -5,7 +5,9 @@ import {
   ConflictError,
   UnauthorizedError,
 } from "../utils/appError.js";
+import crypto from "crypto";
 import { prisma } from "../../prisma/client.js";
+import { sendVerificationEmail } from "../utils/email.js";
 
 const generateToken = (payload) => {
   return jwt.sign(payload, process.env.JWT_SECRET, {
