@@ -1,4 +1,10 @@
-import { loginService, registerService } from "../services/auth.service.js";
+import {
+  loginService,
+  reenviarVerificacionService,
+  registerService,
+  verificarEmailService,
+} from "../services/auth.service.js";
+import { BadRequestError } from "../utils/appError.js";
 
 export const register = async (req, res, next) => {
   try {
@@ -59,6 +65,30 @@ export const profile = async (req, res, next) => {
     return res.status(200).json({
       user: req.user,
     });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const verificarEmail = async (req, res, next) => {
+  try {
+    const { token } = req.query;
+    if (!token) throw new BadRequestError("Token no proporcionado.");
+
+    const result = await verificarEmailService(token);
+    return res.status(200).json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const reenviarVerificacion = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    if (!email) throw new BadRequestError("El correo es obligatorio.");
+
+    const result = await reenviarVerificacionService(email);
+    return res.status(200).json(result);
   } catch (err) {
     next(err);
   }
