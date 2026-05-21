@@ -4,7 +4,9 @@ import {
   login,
   logout,
   profile,
+  reenviarVerificacion,
   register,
+  verificarEmail,
 } from "../controllers/auth.controller.js";
 
 import { verifySession } from "../middlewares/verifySession.js";
