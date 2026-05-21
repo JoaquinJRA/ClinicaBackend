@@ -67,7 +67,7 @@ model Usuario {
   contrasena String       @db.VarChar(255)
   estado    EstadoUsuario @default(ACTIVO)
 
-  emailVerificado      Boolean   @default(false)
+  emailVerificado      Boolean   @default(true)
   tokenVerificacion    String?   @unique @db.VarChar(255)
   tokenVerificacionExp DateTime?
 
