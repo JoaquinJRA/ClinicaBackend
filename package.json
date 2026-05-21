@@ -7,9 +7,10 @@
     "seed": "node prisma/seed.js"
   },
   "scripts": {
-    "dev": "node --watch --env-file=.env ./src/server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
+  "dev": "node --watch --env-file=.env ./src/server.js",
+  "start": "node ./src/server.js",
+  "test": "echo \"Error: no test specified\" && exit 1"
+},
   "repository": {
     "type": "git",
     "url": "git+https://github.com/JoaquinJRA/ClinicaBackend.git"
