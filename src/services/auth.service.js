@@ -42,10 +42,6 @@ export const registerService = async (data) => {
 
   const contrasenaHash = await bcrypt.hash(contrasena, 10);
 
-  // Token de verificación — cadena aleatoria con expiración de 24h
-  const tokenVerificacion = crypto.randomBytes(32).toString("hex");
-  const tokenVerificacionExp = new Date(Date.now() + 1000 * 60 * 60 * 24);
-
   const usuario = await prisma.usuario.create({
     data: {
       nombre,
@@ -53,10 +49,6 @@ export const registerService = async (data) => {
       email,
       contrasena: contrasenaHash,
       rolId: rolPaciente.id,
-      emailVerificado: false,
-      tokenVerificacion,
-      tokenVerificacionExp,
-
       paciente: {
         create: {
           dni,
@@ -70,12 +62,10 @@ export const registerService = async (data) => {
     include: { rol: true, paciente: true },
   });
 
-  // Envía el correo — no bloquea si falla
-  await sendVerificationEmail(email, tokenVerificacion).catch((err) =>
-    console.error("Error al enviar email de verificación:", err),
-  );
+  const token = generateToken({ id: usuario.id, rol: usuario.rol.nombre });
 
   return {
+    token,
     usuario: {
       id: usuario.id,
       nombre: usuario.nombre,
@@ -97,12 +87,6 @@ export const loginService = async (email, contrasena) => {
   const contrasenaValida = await bcrypt.compare(contrasena, usuario.contrasena);
   if (!contrasenaValida)
     throw new UnauthorizedError("Correo o contraseña incorrectos.");
-
-  // Bloquea login si el email no está verificado
-  if (!usuario.emailVerificado)
-    throw new UnauthorizedError(
-      "Debes verificar tu correo electrónico antes de iniciar sesión.",
-    );
 
   const token = generateToken({ id: usuario.id, rol: usuario.rol.nombre });
 
