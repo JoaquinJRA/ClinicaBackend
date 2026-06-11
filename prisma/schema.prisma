@@ -8,7 +8,6 @@ generator client {
   provider = "prisma-client-js"
 }
 
-
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -60,12 +59,12 @@ model Rol {
 }
 
 model Usuario {
-  id        Int           @id @default(autoincrement())
-  nombre    String        @db.VarChar(100)
-  apellido  String        @db.VarChar(100)
-  email     String        @unique @db.VarChar(150)
-  contrasena String       @db.VarChar(255)
-  estado    EstadoUsuario @default(ACTIVO)
+  id         Int           @id @default(autoincrement())
+  nombre     String        @db.VarChar(100)
+  apellido   String        @db.VarChar(100)
+  email      String        @unique @db.VarChar(150)
+  contrasena String        @db.VarChar(255)
+  estado     EstadoUsuario @default(ACTIVO)
 
   emailVerificado      Boolean   @default(true)
   tokenVerificacion    String?   @unique @db.VarChar(255)
@@ -77,34 +76,44 @@ model Usuario {
   paciente Paciente?
   medico   Medico?
 
-  creadoEn       DateTime @default(now())
-  actualizadoEn  DateTime @updatedAt
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
 
   @@map("usuarios")
 }
 
 model Paciente {
-  id           Int       @id @default(autoincrement())
-  dni          String    @unique @db.VarChar(15)
-  telefono     String?   @db.VarChar(20)
-  direccion    String?   @db.VarChar(255)
-  fechaNacimiento DateTime?
-  genero       Genero
+  id                         Int       @id @default(autoincrement())
+  dni                        String    @unique @db.VarChar(15)
+  telefono                   String?   @db.VarChar(20)
+  direccion                  String?   @db.VarChar(255)
+  fechaNacimiento            DateTime?
+  genero                     Genero
+  tipoSangre                 String?   @db.VarChar(5)
+  grupoSanguineo             String?   @map("grupo_sanguineo")
+  peso                       Float?
+  altura                     Float?
+  presionArterial            String?   @map("presion_arterial")
+  antecedentesMedicos        String?   @db.Text
+  contactoEmergenciaNombre   String?   @db.VarChar(100)
+  contactoEmergenciaTelefono String?   @db.VarChar(20)
 
   usuarioId Int     @unique
   usuario   Usuario @relation(fields: [usuarioId], references: [id])
 
   citas           Cita[]
   historialMedico HistorialMedico?
+  alergias        alergias[]
+  medicamentos    medicamentos[]
 
   @@map("pacientes")
 }
 
 model Medico {
-  id             Int           @id @default(autoincrement())
-  numeroColegiatura String     @unique @db.VarChar(50)
-  telefono       String?       @db.VarChar(20)
-  estado         EstadoUsuario @default(ACTIVO)
+  id                Int           @id @default(autoincrement())
+  numeroColegiatura String        @unique @db.VarChar(50)
+  telefono          String?       @db.VarChar(20)
+  estado            EstadoUsuario @default(ACTIVO)
 
   usuarioId Int     @unique
   usuario   Usuario @relation(fields: [usuarioId], references: [id])
@@ -112,7 +121,8 @@ model Medico {
   especialidadId Int
   especialidad   Especialidad @relation(fields: [especialidadId], references: [id])
 
-  citas Cita[]
+  citas     Cita[]
+  consultas Consulta[]
 
   @@map("medicos")
 }
@@ -145,15 +155,43 @@ model Cita {
   creadoEn      DateTime @default(now())
   actualizadoEn DateTime @updatedAt
 
+  @@unique([medicoId, fecha])
   @@map("citas")
 }
 
-model HistorialMedico {
+model alergias {
+  id         Int      @id @default(autoincrement())
+  nombre     String   @db.VarChar(100)
+  severidad  String   @db.VarChar(20)
+  pacienteId Int
+  creadoEn   DateTime @default(now())
+
+  paciente Paciente @relation(fields: [pacienteId], references: [id])
+}
+
+model medicamentos {
   id            Int      @id @default(autoincrement())
-  notasGenerales String? @db.Text
+  nombre        String   @db.VarChar(100)
+  dosis         String   @db.VarChar(50)
+  instrucciones String   @db.VarChar(255)
+  frecuencia    String?  @db.VarChar(100)
+  fechaInicio   DateTime?
+  duracion      Int?
+  unidadDuracion String? @db.VarChar(20)
+  diasRestantes Int?
+  activo        Boolean  @default(true)
+  pacienteId    Int
   creadoEn      DateTime @default(now())
 
-  pacienteId Int     @unique
+  paciente Paciente @relation(fields: [pacienteId], references: [id])
+}
+
+model HistorialMedico {
+  id             Int      @id @default(autoincrement())
+  notasGenerales String?  @db.Text
+  creadoEn       DateTime @default(now())
+
+  pacienteId Int      @unique
   paciente   Paciente @relation(fields: [pacienteId], references: [id])
 
   consultas Consulta[]
@@ -163,16 +201,21 @@ model HistorialMedico {
 
 model Consulta {
   id          Int      @id @default(autoincrement())
+  motivo      String?  @db.VarChar(255)
+  sintomas    String?  @db.Text
   diagnostico String   @db.Text
   tratamiento String?  @db.Text
   notas       String?  @db.Text
   creadoEn    DateTime @default(now())
 
-  citaId Int  @unique
-  cita   Cita @relation(fields: [citaId], references: [id])
+  citaId Int? @unique
+  cita   Cita? @relation(fields: [citaId], references: [id])
 
   historialMedicoId Int
   historialMedico   HistorialMedico @relation(fields: [historialMedicoId], references: [id])
+
+  medicoId Int?
+  medico   Medico? @relation(fields: [medicoId], references: [id])
 
   recetas Receta[]
 
@@ -191,11 +234,11 @@ model Receta {
 }
 
 model Pago {
-  id           Int        @id @default(autoincrement())
-  monto        Decimal    @db.Decimal(10, 2)
-  metodoPago   MetodoPago
-  estado       EstadoPago @default(PENDIENTE)
-  creadoEn     DateTime   @default(now())
+  id         Int        @id @default(autoincrement())
+  monto      Decimal    @db.Decimal(10, 2)
+  metodoPago MetodoPago
+  estado     EstadoPago @default(PENDIENTE)
+  creadoEn   DateTime   @default(now())
 
   citaId Int  @unique
   cita   Cita @relation(fields: [citaId], references: [id])

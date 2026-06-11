@@ -26,6 +26,16 @@ export const registerService = async (data) => {
     direccion,
     fechaNacimiento,
     genero,
+    tipoSangre,
+    grupoSanguineo,
+    peso,
+    altura,
+    presionArterial,
+    antecedentesMedicos,
+    contactoEmergenciaNombre,
+    contactoEmergenciaTelefono,
+    alergias,
+    medicamentos,
   } = data;
 
   const existingUser = await prisma.usuario.findUnique({ where: { email } });
@@ -41,6 +51,12 @@ export const registerService = async (data) => {
     throw new BadRequestError("No existe el rol PACIENTE en la base de datos.");
 
   const contrasenaHash = await bcrypt.hash(contrasena, 10);
+  const alergiasValidas = Array.isArray(alergias)
+    ? alergias.filter((alergia) => alergia?.nombre)
+    : [];
+  const medicamentosValidos = Array.isArray(medicamentos)
+    ? medicamentos.filter((medicamento) => medicamento?.nombre)
+    : [];
 
   const usuario = await prisma.usuario.create({
     data: {
@@ -56,10 +72,36 @@ export const registerService = async (data) => {
           direccion,
           fechaNacimiento: fechaNacimiento ? new Date(fechaNacimiento) : null,
           genero,
+          tipoSangre,
+          grupoSanguineo,
+          peso,
+          altura,
+          presionArterial,
+          antecedentesMedicos,
+          contactoEmergenciaNombre,
+          contactoEmergenciaTelefono,
+          alergias: alergiasValidas.length
+            ? {
+                create: alergiasValidas.map((alergia) => ({
+                  nombre: alergia.nombre,
+                  severidad: alergia.severidad,
+                })),
+              }
+            : undefined,
+          medicamentos: medicamentosValidos.length
+            ? {
+                create: medicamentosValidos.map((medicamento) => ({
+                  nombre: medicamento.nombre,
+                  dosis: medicamento.dosis,
+                  instrucciones: medicamento.instrucciones,
+                  activo: medicamento.activo,
+                })),
+              }
+            : undefined,
         },
       },
     },
-    include: { rol: true, paciente: true },
+    include: { rol: true, paciente: true, medico: true },
   });
 
   const token = generateToken({ id: usuario.id, rol: usuario.rol.nombre });
@@ -72,6 +114,8 @@ export const registerService = async (data) => {
       apellido: usuario.apellido,
       email: usuario.email,
       rol: usuario.rol.nombre,
+      pacienteId: usuario.paciente?.id,
+      medicoId: usuario.medico?.id,
     },
   };
 };
@@ -79,7 +123,7 @@ export const registerService = async (data) => {
 export const loginService = async (email, contrasena) => {
   const usuario = await prisma.usuario.findUnique({
     where: { email },
-    include: { rol: true },
+    include: { rol: true, paciente: true, medico: true },
   });
 
   if (!usuario) throw new UnauthorizedError("Correo o contraseña incorrectos.");
@@ -98,6 +142,8 @@ export const loginService = async (email, contrasena) => {
       apellido: usuario.apellido,
       email: usuario.email,
       rol: usuario.rol.nombre,
+      pacienteId: usuario.paciente?.id,
+      medicoId: usuario.medico?.id,
     },
   };
 };
