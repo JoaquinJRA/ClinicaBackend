@@ -4,6 +4,7 @@ import {
   ConflictError,
   NotFoundError,
 } from "../utils/appError.js";
+import twilio from "twilio";
 
 const SLOTS = [
   "09:00",
@@ -34,6 +35,50 @@ const COSTOS_ESPECIALIDAD = {
   Pediatria: 150,
   Dermatología: 180,
   Dermatologia: 180,
+};
+
+const normalizarTelefono = (telefono) => {
+  const limpio = String(telefono || "").replace(/\D/g, "");
+  if (!limpio) return null;
+  return limpio.startsWith("51") ? `+${limpio}` : `+51${limpio}`;
+};
+
+const sendCitaConfirmadaSms = async (cita) => {
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  const from = process.env.TWILIO_PHONE_NUMBER;
+  const messagingServiceSid = process.env.TWILIO_MESSAGING_SERVICE_SID;
+  const telefono = normalizarTelefono(cita.paciente?.telefono);
+  const hasValidFrom = from && !from.startsWith("TU_");
+  const hasMessagingService =
+    messagingServiceSid && !messagingServiceSid.startsWith("TU_");
+
+  if (!accountSid || !authToken || !telefono || (!hasValidFrom && !hasMessagingService)) {
+    return false;
+  }
+
+  const fecha = new Date(cita.fecha).toLocaleDateString("es-PE", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "UTC",
+  });
+  const medico = `${cita.medico.usuario.nombre} ${cita.medico.usuario.apellido}`;
+  const especialidad = cita.medico.especialidad.nombre;
+
+  try {
+    await twilio(accountSid, authToken).messages.create({
+      ...(hasMessagingService ? { messagingServiceSid } : { from }),
+      to: telefono,
+      body: `Clinica Luz: su cita de ${especialidad} con Dr. ${medico} fue confirmada para el ${fecha}.`,
+    });
+
+    return true;
+  } catch (_err) {
+    return false;
+  }
 };
 
 const toPositiveInt = (value, field) => {
@@ -157,7 +202,7 @@ export const getDisponibilidadMes = async (req, res, next) => {
     );
 
     const medicos = await prisma.medico.findMany({
-      where: { especialidadId },
+      where: { especialidadId, estado: "ACTIVO" },
       select: { id: true },
     });
     const medicoIds = medicos.map((medico) => medico.id);
@@ -225,7 +270,7 @@ export const getSlotsDisponibles = async (req, res, next) => {
     );
 
     const medicos = await prisma.medico.findMany({
-      where: { especialidadId },
+      where: { especialidadId, estado: "ACTIVO" },
       include: {
         usuario: { select: { nombre: true, apellido: true } },
       },
@@ -433,9 +478,23 @@ export const updateEstadoCita = async (req, res, next) => {
     const cita = await prisma.cita.update({
       where: { id },
       data: { estado },
+      include: {
+        paciente: true,
+        medico: {
+          include: {
+            usuario: { select: { nombre: true, apellido: true } },
+            especialidad: true,
+          },
+        },
+      },
     });
 
-    return res.status(200).json(cita);
+    let smsEnviado = false;
+    if (estado === "CONFIRMADA") {
+      smsEnviado = await sendCitaConfirmadaSms(cita);
+    }
+
+    return res.status(200).json({ ...cita, smsEnviado });
   } catch (err) {
     if (err.code === "P2025") {
       return next(new NotFoundError("Cita no encontrada."));

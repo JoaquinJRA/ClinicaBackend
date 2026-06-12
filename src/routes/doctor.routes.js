@@ -8,6 +8,7 @@ import {
   getDiagnosticosPaciente,
   getPerfilMedicoPaciente,
   getPrescripcionesActivas,
+  updatePrescripcion,
   updateEstadoCitaDoctor,
 } from "../controllers/doctor.controller.js";
 import { requireRole } from "../middlewares/requireRole.js";
@@ -25,6 +26,7 @@ router.get(
   getPrescripcionesActivas,
 );
 router.post("/pacientes/:pacienteId/prescripciones", createPrescripciones);
+router.put("/prescripciones/:medId", updatePrescripcion);
 router.delete("/prescripciones/:medId", deletePrescripcion);
 router.get("/pacientes/:pacienteId/diagnosticos", getDiagnosticosPaciente);
 router.get("/pacientes/:pacienteId/perfil-medico", getPerfilMedicoPaciente);

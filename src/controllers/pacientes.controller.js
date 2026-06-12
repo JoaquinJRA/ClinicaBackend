@@ -20,6 +20,7 @@ const CAMPOS_MEDICAMENTO_PERMITIDOS = [
   "instrucciones",
   "activo",
 ];
+const ESTADOS_SEGUIMIENTO = ["TOMADO", "SALTADO"];
 
 const toId = (value, field = "id") => {
   const id = Number(value);
@@ -36,6 +37,21 @@ const pickAllowed = (body, allowedFields) => {
     }
     return data;
   }, {});
+};
+
+const getInicioDiaLocal = (value = new Date()) => {
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split("-").map(Number);
+    return new Date(year, month - 1, day, 0, 0, 0, 0);
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw new BadRequestError("Fecha invalida.");
+  }
+
+  date.setHours(0, 0, 0, 0);
+  return date;
 };
 
 export const getPerfilPaciente = async (req, res, next) => {
@@ -139,13 +155,72 @@ export const deleteAlergiaPaciente = async (req, res, next) => {
 export const getMedicamentosPaciente = async (req, res, next) => {
   try {
     const pacienteId = toId(req.params.id);
+    const hoy = getInicioDiaLocal();
 
     const medicamentos = await prisma.medicamentos.findMany({
       where: { pacienteId, activo: true },
+      include: {
+        seguimientos: {
+          where: { fecha: hoy },
+          take: 1,
+        },
+      },
       orderBy: { creadoEn: "desc" },
     });
 
-    return res.status(200).json(medicamentos);
+    return res.status(200).json(
+      medicamentos.map((medicamento) => {
+        const seguimientoHoy = medicamento.seguimientos[0] ?? null;
+        const { seguimientos, ...data } = medicamento;
+
+        return {
+          ...data,
+          seguimientoHoy,
+        };
+      }),
+    );
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const marcarSeguimientoMedicamento = async (req, res, next) => {
+  try {
+    const pacienteId = toId(req.params.id);
+    const medicamentoId = toId(req.params.mid, "mid");
+    const estado = String(req.body.estado || "").toUpperCase();
+    const fecha = getInicioDiaLocal(req.body.fecha ?? new Date());
+
+    if (!ESTADOS_SEGUIMIENTO.includes(estado)) {
+      throw new BadRequestError("Estado de seguimiento invalido.");
+    }
+
+    const medicamento = await prisma.medicamentos.findUnique({
+      where: { id: medicamentoId },
+    });
+    if (!medicamento) throw new NotFoundError("Medicamento no encontrado.");
+    if (medicamento.pacienteId !== pacienteId) {
+      throw new ForbiddenError("El medicamento no pertenece al paciente.");
+    }
+
+    const seguimiento = await prisma.seguimientoMedicamento.upsert({
+      where: {
+        medicamentoId_pacienteId_fecha: {
+          medicamentoId,
+          pacienteId,
+          fecha,
+        },
+      },
+      update: { estado },
+      create: {
+        medicamentoId,
+        pacienteId,
+        fecha,
+        estado,
+      },
+    });
+
+    return res.status(200).json(seguimiento);
   } catch (err) {
     next(err);
   }

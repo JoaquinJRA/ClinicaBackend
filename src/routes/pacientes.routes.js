@@ -9,6 +9,7 @@ import {
   getHistorialClinicoPaciente,
   getMedicamentosPaciente,
   getPerfilPaciente,
+  marcarSeguimientoMedicamento,
   updateMedicamentoPaciente,
   updatePerfilPaciente,
 } from "../controllers/pacientes.controller.js";
@@ -22,6 +23,7 @@ router.post("/:id/alergias", createAlergiaPaciente);
 router.delete("/:id/alergias/:aid", deleteAlergiaPaciente);
 router.get("/:id/historial", getHistorialClinicoPaciente);
 router.get("/:id/medicamentos", getMedicamentosPaciente);
+router.post("/:id/medicamentos/:mid/seguimiento", marcarSeguimientoMedicamento);
 router.post("/:id/medicamentos", createMedicamentoPaciente);
 router.put("/:id/medicamentos/:mid", updateMedicamentoPaciente);
 router.delete("/:id/medicamentos/:mid", deleteMedicamentoPaciente);

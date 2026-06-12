@@ -284,21 +284,6 @@ export const createPrescripciones = async (req, res, next) => {
       throw new BadRequestError("Debe enviar al menos un medicamento.");
     }
 
-    const medico = await prisma.medico.findUnique({
-      where: { usuarioId: req.user.id },
-      include: {
-        usuario: { select: { nombre: true, apellido: true } },
-        especialidad: true,
-      },
-    });
-    if (!medico) throw new NotFoundError("Medico no encontrado.");
-
-    const historial = await prisma.historialMedico.upsert({
-      where: { pacienteId },
-      update: {},
-      create: { pacienteId, notasGenerales: "" },
-    });
-
     const resultado = await prisma.$transaction(async (tx) => {
       const creados = [];
 
@@ -319,37 +304,19 @@ export const createPrescripciones = async (req, res, next) => {
             duracion: medicamento.duracion,
             unidadDuracion: medicamento.unidadDuracion,
             diasRestantes,
-            instrucciones: medicamento.instrucciones,
+            instrucciones: medicamento.instrucciones ?? "",
             activo: true,
             pacienteId,
           },
         });
         creados.push(creado);
       }
-
-      const consulta = await tx.consulta.create({
-        data: {
-          diagnostico: "Prescripcion medica",
-          tratamiento: medicamentos.map(formatPrescripcion).join("\n"),
-          notas: `Prescripcion emitida por Dr./Dra. ${medico.usuario.nombre} ${medico.usuario.apellido}`,
-          historialMedicoId: historial.id,
-          medicoId: medico.id,
-          recetas: {
-            create: medicamentos.map((medicamento) => ({
-              descripcion: formatPrescripcion(medicamento),
-            })),
-          },
-        },
-        include: { recetas: true },
-      });
-
-      return { creados, consulta };
+      return { creados };
     });
 
     return res.status(201).json({
       mensaje: "Prescripcion emitida",
       total: resultado.creados.length,
-      consultaId: resultado.consulta.id,
     });
   } catch (err) {
     next(err);
@@ -374,6 +341,48 @@ export const deletePrescripcion = async (req, res, next) => {
   }
 };
 
+export const updatePrescripcion = async (req, res, next) => {
+  try {
+    const id = toPositiveInt(req.params.medId, "medId");
+    const {
+      nombre,
+      dosis,
+      frecuencia,
+      fechaInicio,
+      duracion,
+      unidadDuracion,
+      instrucciones,
+    } = req.body;
+
+    if (!nombre || !dosis) {
+      throw new BadRequestError("Nombre y dosis son requeridos.");
+    }
+
+    const diasRestantes = calcularDiasRestantes(duracion, unidadDuracion);
+
+    const medicamento = await prisma.medicamentos.update({
+      where: { id },
+      data: {
+        nombre,
+        dosis,
+        frecuencia,
+        fechaInicio: fechaInicio ? new Date(fechaInicio) : null,
+        duracion,
+        unidadDuracion,
+        diasRestantes,
+        instrucciones: instrucciones ?? "",
+      },
+    });
+
+    return res.status(200).json(medicamento);
+  } catch (err) {
+    if (err.code === "P2025") {
+      return next(new NotFoundError("Prescripcion no encontrada."));
+    }
+    next(err);
+  }
+};
+
 export const getDiagnosticosPaciente = async (req, res, next) => {
   try {
     const pacienteId = toPositiveInt(req.params.pacienteId, "pacienteId");
@@ -381,6 +390,7 @@ export const getDiagnosticosPaciente = async (req, res, next) => {
     const consultas = await prisma.consulta.findMany({
       where: { historialMedico: { pacienteId } },
       include: {
+        recetas: { orderBy: { creadoEn: "asc" } },
         medico: {
           include: {
             usuario: { select: { nombre: true, apellido: true } },
@@ -412,6 +422,9 @@ export const getDiagnosticosPaciente = async (req, res, next) => {
         diagnostico: consulta.diagnostico,
         tratamiento: consulta.tratamiento,
         notas: consulta.notas,
+        receta: consulta.recetas.length
+          ? consulta.recetas.map((receta) => receta.descripcion).join("\n")
+          : null,
         medico: consulta.cita
           ? `Dr./Dra. ${consulta.cita.medico.usuario.nombre} ${consulta.cita.medico.usuario.apellido}`
           : consulta.medico
@@ -467,7 +480,15 @@ export const getPerfilMedicoPaciente = async (req, res, next) => {
 export const createDiagnostico = async (req, res, next) => {
   try {
     const pacienteId = toPositiveInt(req.body.pacienteId, "pacienteId");
-    const { citaId, motivo, sintomas, diagnostico, tratamiento, notas } = req.body;
+    const {
+      citaId,
+      motivo,
+      sintomas,
+      diagnostico,
+      tratamiento,
+      notas,
+      medicamentos = [],
+    } = req.body;
 
     if (!diagnostico) {
       throw new BadRequestError("El diagnostico es requerido.");
@@ -484,17 +505,57 @@ export const createDiagnostico = async (req, res, next) => {
       create: { pacienteId, notasGenerales: "" },
     });
 
-    const consulta = await prisma.consulta.create({
-      data: {
-        motivo,
-        sintomas,
-        diagnostico,
-        tratamiento,
-        notas,
-        historialMedicoId: historial.id,
-        medicoId: medico.id,
-        ...(citaId && { citaId: toPositiveInt(citaId, "citaId") }),
-      },
+    const medicamentosValidos = Array.isArray(medicamentos)
+      ? medicamentos.filter((medicamento) => medicamento?.nombre && medicamento?.dosis)
+      : [];
+
+    const consulta = await prisma.$transaction(async (tx) => {
+      const creada = await tx.consulta.create({
+        data: {
+          motivo,
+          sintomas,
+          diagnostico,
+          tratamiento,
+          notas,
+          historialMedicoId: historial.id,
+          medicoId: medico.id,
+          ...(citaId && { citaId: toPositiveInt(citaId, "citaId") }),
+          ...(medicamentosValidos.length && {
+            recetas: {
+              create: medicamentosValidos.map((medicamento) => ({
+                descripcion: formatPrescripcion(medicamento),
+              })),
+            },
+          }),
+        },
+        include: { recetas: true },
+      });
+
+      for (const medicamento of medicamentosValidos) {
+        const diasRestantes = calcularDiasRestantes(
+          medicamento.duracion,
+          medicamento.unidadDuracion,
+        );
+
+        await tx.medicamentos.create({
+          data: {
+            nombre: medicamento.nombre,
+            dosis: medicamento.dosis,
+            frecuencia: medicamento.frecuencia,
+            fechaInicio: medicamento.fechaInicio
+              ? new Date(medicamento.fechaInicio)
+              : null,
+            duracion: medicamento.duracion,
+            unidadDuracion: medicamento.unidadDuracion,
+            diasRestantes,
+            instrucciones: medicamento.instrucciones ?? "",
+            activo: true,
+            pacienteId,
+          },
+        });
+      }
+
+      return creada;
     });
 
     return res.status(201).json(consulta);

@@ -1,5 +1,6 @@
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import twilio from "twilio";
 import {
   BadRequestError,
   ConflictError,
@@ -13,6 +14,99 @@ const generateToken = (payload) => {
   return jwt.sign(payload, process.env.JWT_SECRET, {
     expiresIn: "1d",
   });
+};
+
+const telefonosVerificados = new Set();
+
+const normalizarTelefono = (telefono) => {
+  const limpio = String(telefono || "").replace(/\D/g, "");
+
+  if (!limpio) {
+    throw new BadRequestError("El telefono es obligatorio.");
+  }
+
+  return limpio.startsWith("51") ? `+${limpio}` : `+51${limpio}`;
+};
+
+const getTwilioVerify = () => {
+  const { TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_VERIFY_SERVICE_SID } =
+    process.env;
+
+  if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN || !TWILIO_VERIFY_SERVICE_SID) {
+    throw new BadRequestError("Twilio no esta configurado en el servidor.");
+  }
+
+  return twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN).verify.v2.services(
+    TWILIO_VERIFY_SERVICE_SID,
+  );
+};
+
+const consumirTelefonoVerificado = (telefono) => {
+  const telefonoNormalizado = normalizarTelefono(telefono);
+
+  if (!telefonosVerificados.has(telefonoNormalizado)) {
+    throw new BadRequestError("Debe verificar su numero telefonico.");
+  }
+
+  telefonosVerificados.delete(telefonoNormalizado);
+  return telefonoNormalizado;
+};
+
+const buscarPacientePorTelefono = async (telefono) => {
+  const telefonoNormalizado = normalizarTelefono(telefono);
+  const telefonoLimpio = telefonoNormalizado.replace(/\D/g, "");
+  const variantes = [
+    telefonoNormalizado,
+    telefonoLimpio,
+    telefonoLimpio.startsWith("51") ? telefonoLimpio.slice(2) : telefonoLimpio,
+  ];
+
+  const paciente = await prisma.paciente.findFirst({
+    where: {
+      OR: [...new Set(variantes)].map((valor) => ({ telefono: valor })),
+    },
+    include: { usuario: true },
+  });
+
+  return { paciente, telefonoNormalizado };
+};
+
+export const enviarSmsService = async (telefono) => {
+  const telefonoNormalizado = normalizarTelefono(telefono);
+
+  await getTwilioVerify().verifications.create({
+    to: telefonoNormalizado,
+    channel: "sms",
+  });
+
+  return {
+    message: "Codigo enviado correctamente.",
+    telefono: telefonoNormalizado,
+  };
+};
+
+export const verificarSmsService = async (telefono, codigo) => {
+  const telefonoNormalizado = normalizarTelefono(telefono);
+
+  if (!/^\d{6}$/.test(String(codigo || ""))) {
+    throw new BadRequestError("Ingresa el codigo de 6 digitos.");
+  }
+
+  const verification = await getTwilioVerify().verificationChecks.create({
+    to: telefonoNormalizado,
+    code: codigo,
+  });
+
+  if (verification.status !== "approved") {
+    throw new BadRequestError("Codigo incorrecto o expirado.");
+  }
+
+  telefonosVerificados.add(telefonoNormalizado);
+
+  return {
+    telefono: telefonoNormalizado,
+    telefonoVerificado: true,
+  };
 };
 
 export const registerService = async (data) => {
@@ -36,7 +130,18 @@ export const registerService = async (data) => {
     contactoEmergenciaTelefono,
     alergias,
     medicamentos,
+    telefonoVerificado,
   } = data;
+
+  if (!telefono) {
+    throw new BadRequestError("El telefono es obligatorio.");
+  }
+
+  if (telefonoVerificado !== true) {
+    throw new BadRequestError("Debe verificar su numero telefonico.");
+  }
+
+  const telefonoNormalizado = consumirTelefonoVerificado(telefono);
 
   const existingUser = await prisma.usuario.findUnique({ where: { email } });
   if (existingUser) throw new ConflictError("El correo ya está registrado.");
@@ -68,7 +173,8 @@ export const registerService = async (data) => {
       paciente: {
         create: {
           dni,
-          telefono,
+          telefono: telefonoNormalizado,
+          telefonoVerificado: true,
           direccion,
           fechaNacimiento: fechaNacimiento ? new Date(fechaNacimiento) : null,
           genero,
@@ -146,6 +252,62 @@ export const loginService = async (email, contrasena) => {
       medicoId: usuario.medico?.id,
     },
   };
+};
+
+export const solicitarRecuperacionService = async (telefono) => {
+  const { paciente, telefonoNormalizado } =
+    await buscarPacientePorTelefono(telefono);
+
+  if (!paciente?.usuario) {
+    throw new BadRequestError("No existe una cuenta con ese telefono.");
+  }
+
+  await getTwilioVerify().verifications.create({
+    to: telefonoNormalizado,
+    channel: "sms",
+  });
+
+  return {
+    message: "Codigo enviado al telefono.",
+    telefono: telefonoNormalizado,
+  };
+};
+
+export const resetearContrasenaService = async ({
+  telefono,
+  codigo,
+  nuevaContrasena,
+}) => {
+  if (!telefono) throw new BadRequestError("El telefono es obligatorio.");
+  if (!codigo) throw new BadRequestError("El codigo es obligatorio.");
+  if (!nuevaContrasena || nuevaContrasena.length < 6) {
+    throw new BadRequestError("La contrasena debe tener minimo 6 caracteres.");
+  }
+
+  const { paciente, telefonoNormalizado } =
+    await buscarPacientePorTelefono(telefono);
+
+  if (!paciente?.usuario) {
+    throw new BadRequestError("No existe una cuenta con ese telefono.");
+  }
+
+  const verification = await getTwilioVerify().verificationChecks.create({
+    to: telefonoNormalizado,
+    code: codigo,
+  });
+
+  if (verification.status !== "approved") {
+    throw new BadRequestError("Codigo incorrecto o expirado.");
+  }
+
+  const contrasenaHash = await bcrypt.hash(nuevaContrasena, 10);
+
+  await prisma.usuario.update({
+    where: { id: paciente.usuario.id },
+    data: { contrasena: contrasenaHash },
+  });
+
+  return { message: "Contrasena actualizada correctamente." };
 };
 
 export const verificarEmailService = async (token) => {
