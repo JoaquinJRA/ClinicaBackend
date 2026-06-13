@@ -263,3 +263,22 @@ model Pago {
 
   @@map("pagos")
 }
+
+model Auditoria {
+  id            Int      @id @default(autoincrement())
+  usuarioId     Int?
+  usuarioNombre String   @db.VarChar(200)
+  rol           String   @db.VarChar(50)
+  accion        String   @db.VarChar(100)
+  modulo        String   @db.VarChar(80)
+  entidad       String?  @db.VarChar(80)
+  entidadId     Int?
+  detalle       Json?
+  ip            String?  @db.VarChar(80)
+  creadoEn      DateTime @default(now())
+
+  @@index([modulo])
+  @@index([accion])
+  @@index([creadoEn])
+  @@map("auditoria")
+}

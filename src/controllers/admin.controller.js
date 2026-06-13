@@ -79,6 +79,27 @@ const dayRange = (fecha) => {
   };
 };
 
+const monthRange = (year, month) => {
+  const parsedYear = Number(year);
+  const parsedMonth = Number(month);
+  if (
+    !Number.isInteger(parsedYear) ||
+    !Number.isInteger(parsedMonth) ||
+    parsedMonth < 1 ||
+    parsedMonth > 12
+  ) {
+    throw new BadRequestError("Mes o año invalido.");
+  }
+
+  return {
+    inicio: new Date(Date.UTC(parsedYear, parsedMonth - 1, 1, 0, 0, 0, 0)),
+    fin: new Date(Date.UTC(parsedYear, parsedMonth, 0, 23, 59, 59, 999)),
+    dias: new Date(Date.UTC(parsedYear, parsedMonth, 0)).getUTCDate(),
+    year: parsedYear,
+    month: parsedMonth,
+  };
+};
+
 const getCostoEspecialidad = (nombre) => COSTOS_ESPECIALIDAD[nombre] ?? 100;
 
 const SEVERIDADES_ALERGIA = ["SEVERO", "MODERADO", "LEVE"];
@@ -128,13 +149,55 @@ const normalizeMedicamentos = (items) =>
 
 const sanitize = (value) => {
   if (Array.isArray(value)) return value.map(sanitize);
-  if (value instanceof Date) return value;
+  if (value instanceof Date) return value.toISOString();
   if (!value || typeof value !== "object") return value;
 
   return Object.entries(value).reduce((result, [key, entry]) => {
     if (key !== "contrasena") result[key] = sanitize(entry);
     return result;
   }, {});
+};
+
+const actorNombre = async (req) => {
+  if (!req.user?.id) {
+    return { usuarioId: null, usuarioNombre: "Sistema", rol: "SISTEMA" };
+  }
+
+  const usuario = await prisma.usuario.findUnique({
+    where: { id: Number(req.user.id) },
+    include: { rol: true },
+  });
+
+  return {
+    usuarioId: usuario?.id ?? Number(req.user.id),
+    usuarioNombre: usuario
+      ? `${usuario.nombre} ${usuario.apellido}`
+      : `Usuario ${req.user.id}`,
+    rol: usuario?.rol?.nombre ?? req.user.rol ?? "ADMIN",
+  };
+};
+
+const registrarAuditoria = async (req, data, tx = prisma) => {
+  const actor = await actorNombre(req);
+  return tx.auditoria.create({
+    data: {
+      ...actor,
+      accion: data.accion,
+      modulo: data.modulo,
+      entidad: data.entidad,
+      entidadId: data.entidadId,
+      detalle: data.detalle ? sanitize(data.detalle) : undefined,
+      ip: req.ip || req.headers["x-forwarded-for"] || undefined,
+    },
+  });
+};
+
+const registrarAuditoriaSeguro = async (req, data) => {
+  try {
+    await registrarAuditoria(req, data);
+  } catch (err) {
+    console.error("No se pudo registrar auditoria:", err.message);
+  }
 };
 
 const getRol = async (nombre) => {
@@ -155,14 +218,51 @@ const usuarioInclude = {
   medico: { include: { especialidad: true } },
 };
 
+export const getAuditoriaAdmin = async (req, res, next) => {
+  try {
+    const { q, accion, modulo, fechaDesde, fechaHasta } = req.query;
+    const query = String(q || "").trim();
+    const creadoEn = {};
+    if (fechaDesde) creadoEn.gte = new Date(`${fechaDesde}T00:00:00`);
+    if (fechaHasta) creadoEn.lte = new Date(`${fechaHasta}T23:59:59`);
+
+    const registros = await prisma.auditoria.findMany({
+      where: {
+        ...(accion && { accion: String(accion) }),
+        ...(modulo && { modulo: String(modulo) }),
+        ...(Object.keys(creadoEn).length && { creadoEn }),
+        ...(query && {
+          OR: [
+            { usuarioNombre: { contains: query, mode: "insensitive" } },
+            { accion: { contains: query, mode: "insensitive" } },
+            { modulo: { contains: query, mode: "insensitive" } },
+            { entidad: { contains: query, mode: "insensitive" } },
+          ],
+        }),
+      },
+      orderBy: { creadoEn: "desc" },
+      take: 200,
+    });
+
+    return res.status(200).json(registros);
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const getUsuariosAdmin = async (req, res, next) => {
   try {
-    const { rol, q } = req.query;
+    const { rol, q, estado } = req.query;
     const query = String(q || "").trim();
+    const estadoUsuario = estado ? String(estado) : undefined;
+    if (estadoUsuario && !ESTADOS_USUARIO.includes(estadoUsuario)) {
+      throw new BadRequestError("Estado invalido.");
+    }
 
     const usuarios = await prisma.usuario.findMany({
       where: {
         ...(rol && { rol: { nombre: String(rol) } }),
+        ...(estadoUsuario && { estado: estadoUsuario }),
         ...(query && {
           OR: [
             { nombre: { contains: query, mode: "insensitive" } },
@@ -273,6 +373,18 @@ export const createUsuarioAdmin = async (req, res, next) => {
       });
     });
 
+    await registrarAuditoriaSeguro(req, {
+      accion: "CREAR_USUARIO",
+      modulo: "Usuarios",
+      entidad: "Usuario",
+      entidadId: usuario.id,
+      detalle: {
+        usuario: `${usuario.nombre} ${usuario.apellido}`,
+        email: usuario.email,
+        rol,
+      },
+    });
+
     return res.status(201).json(sanitize(usuario));
   } catch (err) {
     if (err.code === "P2002") {
@@ -366,8 +478,9 @@ export const updateUsuarioAdmin = async (req, res, next) => {
       }
       if (actual.paciente && Array.isArray(req.body.medicamentos)) {
         const medicamentos = normalizeMedicamentos(req.body.medicamentos);
-        await tx.medicamentos.deleteMany({
+        await tx.medicamentos.updateMany({
           where: { pacienteId: actual.paciente.id, activo: true },
+          data: { activo: false },
         });
         if (medicamentos.length) {
           await tx.medicamentos.createMany({
@@ -385,6 +498,18 @@ export const updateUsuarioAdmin = async (req, res, next) => {
         });
       }
       return tx.usuario.findUnique({ where: { id }, include: usuarioInclude });
+    });
+
+    await registrarAuditoriaSeguro(req, {
+      accion: "EDITAR_USUARIO",
+      modulo: "Usuarios",
+      entidad: "Usuario",
+      entidadId: usuario.id,
+      detalle: {
+        usuario: `${usuario.nombre} ${usuario.apellido}`,
+        email: usuario.email,
+        campos: Object.keys(req.body).filter((campo) => campo !== "contrasena"),
+      },
     });
 
     return res.status(200).json(sanitize(usuario));
@@ -417,6 +542,17 @@ export const updateEstadoUsuarioAdmin = async (req, res, next) => {
         });
       }
       return tx.usuario.findUnique({ where: { id }, include: usuarioInclude });
+    });
+
+    await registrarAuditoriaSeguro(req, {
+      accion: "CAMBIAR_ESTADO_USUARIO",
+      modulo: "Usuarios",
+      entidad: "Usuario",
+      entidadId: usuario.id,
+      detalle: {
+        usuario: `${usuario.nombre} ${usuario.apellido}`,
+        estado,
+      },
     });
 
     return res.status(200).json(sanitize(usuario));
@@ -467,6 +603,18 @@ export const deleteUsuarioAdmin = async (req, res, next) => {
       });
     }
 
+    await registrarAuditoriaSeguro(req, {
+      accion: "ELIMINAR_USUARIO",
+      modulo: "Usuarios",
+      entidad: "Usuario",
+      entidadId: actualizado.id,
+      detalle: {
+        usuario: `${actualizado.nombre} ${actualizado.apellido}`,
+        email: actualizado.email,
+        resultado: "INACTIVO",
+      },
+    });
+
     return res.status(200).json(sanitize(actualizado));
   } catch (err) {
     next(err);
@@ -514,6 +662,134 @@ export const getCitasAdmin = async (req, res, next) => {
   }
 };
 
+export const getOcupacionMedicaAdmin = async (req, res, next) => {
+  try {
+    const now = new Date();
+    const { inicio, fin, dias, year, month } = monthRange(
+      req.query.year || now.getUTCFullYear(),
+      req.query.month || now.getUTCMonth() + 1,
+    );
+
+    const [especialidades, medicos, citas] = await Promise.all([
+      prisma.especialidad.findMany({
+        orderBy: { nombre: "asc" },
+      }),
+      prisma.medico.findMany({
+        where: { estado: "ACTIVO" },
+        include: { usuario: true, especialidad: true },
+        orderBy: { id: "asc" },
+      }),
+      prisma.cita.findMany({
+        where: {
+          fecha: { gte: inicio, lte: fin },
+          estado: { not: "CANCELADA" },
+        },
+        include: {
+          medico: { include: { especialidad: true, usuario: true } },
+        },
+      }),
+    ]);
+
+    const fechaKey = (fecha) => fecha.toISOString().slice(0, 10);
+    const slotKey = (fecha) =>
+      `${String(fecha.getUTCHours()).padStart(2, "0")}:${String(
+        fecha.getUTCMinutes(),
+      ).padStart(2, "0")}`;
+
+    const totalSlotsMes = medicos.length * SLOTS.length * dias;
+    const diasData = Array.from({ length: dias }, (_, index) => {
+      const fecha = new Date(Date.UTC(year, month - 1, index + 1));
+      const key = fechaKey(fecha);
+      const slotsOcupados = citas.filter((cita) => fechaKey(cita.fecha) === key)
+        .length;
+      const totalSlots = medicos.length * SLOTS.length;
+      const ocupacion = totalSlots ? Math.round((slotsOcupados / totalSlots) * 100) : 0;
+
+      return {
+        fecha: key,
+        slotsOcupados,
+        totalSlots,
+        ocupacion,
+        demanda:
+          ocupacion >= 70
+            ? "ALTA"
+            : ocupacion >= 35
+              ? "MEDIA"
+              : "BAJA",
+      };
+    });
+
+    const horarios = SLOTS.map((hora) => {
+      const total = citas.filter((cita) => slotKey(cita.fecha) === hora).length;
+      const totalSlots = medicos.length * dias;
+      return {
+        hora,
+        total,
+        ocupacion: totalSlots ? Math.round((total / totalSlots) * 100) : 0,
+      };
+    }).sort((a, b) => b.total - a.total);
+
+    const especialidadesData = especialidades.map((especialidad) => {
+      const medicosEspecialidad = medicos.filter(
+        (medico) => medico.especialidadId === especialidad.id,
+      );
+      const citasEspecialidad = citas.filter(
+        (cita) => cita.medico.especialidadId === especialidad.id,
+      );
+      const totalSlots = medicosEspecialidad.length * SLOTS.length * dias;
+      return {
+        id: especialidad.id,
+        nombre: especialidad.nombre,
+        medicosActivos: medicosEspecialidad.length,
+        citas: citasEspecialidad.length,
+        totalSlots,
+        ocupacion: totalSlots
+          ? Math.round((citasEspecialidad.length / totalSlots) * 100)
+          : 0,
+        sinMedicos: medicosEspecialidad.length === 0,
+      };
+    });
+
+    const medicosData = medicos.map((medico) => {
+      const citasMedico = citas.filter((cita) => cita.medicoId === medico.id);
+      const totalSlots = SLOTS.length * dias;
+      const ocupacion = totalSlots
+        ? Math.round((citasMedico.length / totalSlots) * 100)
+        : 0;
+      return {
+        id: medico.id,
+        nombre: `${medico.usuario.nombre} ${medico.usuario.apellido}`,
+        especialidad: medico.especialidad.nombre,
+        citas: citasMedico.length,
+        totalSlots,
+        ocupacion,
+        pocosTurnos: citasMedico.length <= 2,
+      };
+    }).sort((a, b) => a.citas - b.citas);
+
+    return res.status(200).json({
+      periodo: { year, month, dias },
+      resumen: {
+        totalCitas: citas.length,
+        totalMedicos: medicos.length,
+        totalEspecialidades: especialidades.length,
+        totalSlots: totalSlotsMes,
+        ocupacionGeneral: totalSlotsMes
+          ? Math.round((citas.length / totalSlotsMes) * 100)
+          : 0,
+        especialidadesSinMedicos: especialidadesData.filter((item) => item.sinMedicos),
+        medicosConPocosTurnos: medicosData.filter((item) => item.pocosTurnos),
+      },
+      dias: diasData,
+      horarios,
+      especialidades: especialidadesData,
+      medicos: medicosData,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const reprogramarCitaAdmin = async (req, res, next) => {
   try {
     const id = toPositiveInt(req.params.id);
@@ -539,6 +815,18 @@ export const reprogramarCitaAdmin = async (req, res, next) => {
     const cita = await prisma.cita.update({
       where: { id },
       data: { fecha, medicoId: nextMedicoId, estado: "PENDIENTE" },
+    });
+
+    await registrarAuditoriaSeguro(req, {
+      accion: "REPROGRAMAR_CITA",
+      modulo: "Citas",
+      entidad: "Cita",
+      entidadId: cita.id,
+      detalle: {
+        fecha: cita.fecha,
+        medicoId: cita.medicoId,
+        estado: cita.estado,
+      },
     });
 
     return res.status(200).json(cita);
@@ -579,6 +867,18 @@ export const reasignarCitaAdmin = async (req, res, next) => {
       data: { medicoId },
     });
 
+    await registrarAuditoriaSeguro(req, {
+      accion: "REASIGNAR_CITA",
+      modulo: "Citas",
+      entidad: "Cita",
+      entidadId: actualizada.id,
+      detalle: {
+        medicoAnteriorId: cita.medicoId,
+        medicoNuevoId: actualizada.medicoId,
+        fecha: actualizada.fecha,
+      },
+    });
+
     return res.status(200).json(actualizada);
   } catch (err) {
     next(err);
@@ -594,6 +894,13 @@ export const updateEstadoCitaAdmin = async (req, res, next) => {
     }
 
     const cita = await prisma.cita.update({ where: { id }, data: { estado } });
+    await registrarAuditoriaSeguro(req, {
+      accion: "CAMBIAR_ESTADO_CITA",
+      modulo: "Citas",
+      entidad: "Cita",
+      entidadId: cita.id,
+      detalle: { estado, fecha: cita.fecha },
+    });
     return res.status(200).json(cita);
   } catch (err) {
     if (err.code === "P2025") {
@@ -708,6 +1015,18 @@ export const marcarPagoPagadoAdmin = async (req, res, next) => {
       where: { id },
       data: { estado: "PAGADO" },
     });
+    await registrarAuditoriaSeguro(req, {
+      accion: "MARCAR_PAGO_PAGADO",
+      modulo: "Pagos",
+      entidad: "Pago",
+      entidadId: pago.id,
+      detalle: {
+        citaId: pago.citaId,
+        monto: Number(pago.monto),
+        estado: "PAGADO",
+      },
+    });
+
     return res.status(200).json({ ...pago, monto: Number(pago.monto) });
   } catch (err) {
     if (err.code === "P2025") {

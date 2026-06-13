@@ -2,9 +2,11 @@ import { Router } from "express";
 import {
   createUsuarioAdmin,
   deleteUsuarioAdmin,
+  getAuditoriaAdmin,
   getCitasAdmin,
   getEspecialidadesAdmin,
   getMedicosAdmin,
+  getOcupacionMedicaAdmin,
   getPagosAdmin,
   getPagosResumenAdmin,
   getUsuariosAdmin,
@@ -22,6 +24,7 @@ const router = Router();
 
 router.use(verifySession, requireRole("ADMIN"));
 
+router.get("/auditoria", getAuditoriaAdmin);
 router.get("/usuarios", getUsuariosAdmin);
 router.post("/usuarios", createUsuarioAdmin);
 router.put("/usuarios/:id", updateUsuarioAdmin);
@@ -30,6 +33,7 @@ router.delete("/usuarios/:id", deleteUsuarioAdmin);
 router.get("/especialidades", getEspecialidadesAdmin);
 
 router.get("/citas", getCitasAdmin);
+router.get("/ocupacion-medica", getOcupacionMedicaAdmin);
 router.put("/citas/:id/reprogramar", reprogramarCitaAdmin);
 router.put("/citas/:id/reasignar", reasignarCitaAdmin);
 router.put("/citas/:id/estado", updateEstadoCitaAdmin);
