@@ -238,6 +238,12 @@ export const loginService = async (email, contrasena) => {
   if (!contrasenaValida)
     throw new UnauthorizedError("Correo o contraseña incorrectos.");
 
+  if (usuario.estado === "INACTIVO") {
+    throw new UnauthorizedError(
+      "Tu cuenta se encuentra inactiva. Comunicate con administracion.",
+    );
+  }
+
   const token = generateToken({ id: usuario.id, rol: usuario.rol.nombre });
 
   return {
