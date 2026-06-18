@@ -14,6 +14,7 @@ app.use(
     origin: [
       "http://localhost:5173",
       "https://clinicafrontend-kappa.vercel.app",
+      "https://clinica-frontend-rosy-six.vercel.app",
     ],
     credentials: true,
   })
