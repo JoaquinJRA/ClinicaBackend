@@ -11,6 +11,14 @@ import {
 import { BadRequestError } from "../utils/appError.js";
 import { prisma } from "../../prisma/client.js";
 
+const isProduction = process.env.NODE_ENV === "production";
+const cookieOptions = {
+  httpOnly: true,
+  secure: isProduction,
+  sameSite: isProduction ? "none" : "lax",
+  maxAge: 1000 * 60 * 60 * 24,
+};
+
 export const register = async (req, res, next) => {
   try {
     const result = await registerService(req.body);
@@ -20,12 +28,7 @@ export const register = async (req, res, next) => {
       data: { telefonoVerificado: true },
     });
 
-    res.cookie("token", result.token, {
-      httpOnly: true,
-      secure: false,
-      sameSite: "lax",
-      maxAge: 1000 * 60 * 60 * 24,
-    });
+    res.cookie("token", result.token, cookieOptions);
 
     return res.status(201).json({
       message: "Usuario registrado correctamente.",
@@ -68,12 +71,7 @@ export const login = async (req, res, next) => {
 
     const result = await loginService(email, contrasena);
 
-    res.cookie("token", result.token, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "none",
-      maxAge: 1000 * 60 * 60 * 24,
-    });
+    res.cookie("token", result.token, cookieOptions);
 
     return res.status(200).json({
       message: "Inicio de sesión exitoso.",
@@ -107,7 +105,11 @@ export const resetearContrasena = async (req, res, next) => {
 
 export const logout = async (_req, res, next) => {
   try {
-    res.clearCookie("token");
+    res.clearCookie("token", {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? "none" : "lax",
+    });
 
     return res.status(200).json({
       message: "Sesión cerrada correctamente.",
