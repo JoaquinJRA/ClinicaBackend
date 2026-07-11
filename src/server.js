@@ -9,14 +9,24 @@ import { errorHandler } from "./middlewares/errorHandler.js";
 import cors from "cors";
 
 const app = express();
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://clinicafrontend-kappa.vercel.app",
+  "https://clinica-frontend-rosy-six.vercel.app",
+];
+
+const isAllowedVercelPreview = (origin) =>
+  /^https:\/\/clinica-frontend-[a-z0-9-]+\.vercel\.app$/.test(origin);
+
 app.use(
   cors({
-    origin: [
-      "http://localhost:5173",
-      "https://clinicafrontend-kappa.vercel.app",
-      "https://clinica-frontend-rosy-six.vercel.app",
-      "https://clinica-frontend-k862s8k2c-joaquin-rojas-projects.vercel.app",
-    ],
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin) || isAllowedVercelPreview(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error("Not allowed by CORS"));
+    },
     credentials: true,
   })
 );
