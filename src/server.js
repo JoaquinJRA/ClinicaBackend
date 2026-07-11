@@ -15,6 +15,7 @@ app.use(
       "http://localhost:5173",
       "https://clinicafrontend-kappa.vercel.app",
       "https://clinica-frontend-rosy-six.vercel.app",
+      "https://clinica-frontend-k862s8k2c-joaquin-rojas-projects.vercel.app",
     ],
     credentials: true,
   })
