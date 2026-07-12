@@ -13,6 +13,7 @@ const allowedOrigins = [
   "http://localhost:5173",
   "https://clinicafrontend-kappa.vercel.app",
   "https://clinica-frontend-rosy-six.vercel.app",
+  "https://clinica-frontend-git-main-joaquin-rojas-projects.vercel.app",
 ];
 
 const isAllowedVercelPreview = (origin) =>
