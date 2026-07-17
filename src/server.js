@@ -22,17 +22,29 @@ const isAllowedVercelPreview = (origin) =>
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin || allowedOrigins.includes(origin) || isAllowedVercelPreview(origin)) {
+      if (
+        !origin ||
+        allowedOrigins.includes(origin) ||
+        isAllowedVercelPreview(origin)
+      ) {
         return callback(null, true);
       }
 
       return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
-  })
+  }),
 );
 app.use(express.json());
 app.use(cookieParser());
+
+app.get("/api", (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "Backend funcionando correctamente",
+    timestamp: new Date().toISOString(),
+  });
+});
 
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
