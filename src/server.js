@@ -11,6 +11,7 @@ import cors from "cors";
 const app = express();
 const allowedOrigins = [
   "http://localhost:5173",
+  "http://127.0.0.1:5173",
   "https://clinicafrontend-kappa.vercel.app",
   "https://clinica-frontend-rosy-six.vercel.app",
   "https://clinica-frontend-git-main-joaquin-rojas-projects.vercel.app",
