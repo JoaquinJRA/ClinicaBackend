@@ -2,17 +2,10 @@ import { jest } from "@jest/globals";
 import request from "supertest";
 import app from "../../app.js";
 import { prisma } from "../../../prisma/client.js";
-
-// Las pruebas de integración golpean una base de datos real (definida en
-// DATABASE_URL / .env.test), por lo que necesitan más tiempo que las unitarias.
 jest.setTimeout(15000);
 
-// ============================================================
-// Datos de prueba (seed) — se crean antes de todo y se limpian al final
-// ============================================================
+const TEST_TAG = "inttest"; 
 
-const TEST_TAG = "inttest"; // usado para identificar y limpiar solo lo que creamos aquí
-// Nota: "DNI-" + TEST_TAG debe caber en VarChar(15) según el schema de Prisma
 
 let rolPacienteId;
 let rolMedicoId;
@@ -21,7 +14,7 @@ let medicoId;
 let pacienteId;
 
 beforeAll(async () => {
-  // Roles (usan upsert por si ya existen de una corrida anterior)
+  // Roles 
   const rolPaciente = await prisma.rol.upsert({
     where: { nombre: "PACIENTE" },
     update: {},
@@ -93,8 +86,8 @@ beforeAll(async () => {
   pacienteId = paciente.id;
 });
 
-// Limpia las citas creadas DURANTE cada test, para que no choquen entre sí
-// por la restricción @@unique([medicoId, fecha]).
+
+
 afterEach(async () => {
   await prisma.pago.deleteMany({ where: { cita: { medicoId } } });
   await prisma.cita.deleteMany({ where: { medicoId } });
@@ -109,9 +102,9 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-// ============================================================
-// POST /api/citas
-// ============================================================
+
+// Metodo POST - Citas
+
 
 describe("POST /api/citas", () => {
   test("CI03: crea una cita correctamente (201)", async () => {
@@ -131,7 +124,7 @@ describe("POST /api/citas", () => {
       })
     );
 
-    // Confirma que también se creó el pago asociado (efecto colateral del service)
+    
     const pago = await prisma.pago.findUnique({
       where: { citaId: response.body.id },
     });
@@ -154,7 +147,7 @@ describe("POST /api/citas", () => {
   test("CI05: rechaza un slot ya ocupado (409)", async () => {
     const fecha = "2099-06-15T11:00";
 
-    // Primera cita: debe crearse sin problema
+    
     const primera = await request(app).post("/api/citas").send({
       pacienteId,
       medicoId,
@@ -163,7 +156,7 @@ describe("POST /api/citas", () => {
     });
     expect(primera.status).toBe(201);
 
-    // Segunda cita en el mismo horario y médico: debe rechazarse
+    
     const segunda = await request(app).post("/api/citas").send({
       pacienteId,
       medicoId,
@@ -179,7 +172,7 @@ describe("POST /api/citas", () => {
     const response = await request(app).post("/api/citas").send({
       pacienteId,
       medicoId,
-      fecha: "15-06-2099 10:00", // formato incorrecto a propósito
+      fecha: "15-06-2099 10:00",
       motivo: "Consulta",
     });
 
@@ -190,7 +183,7 @@ describe("POST /api/citas", () => {
     const response = await request(app).post("/api/citas").send({
       pacienteId,
       medicoId,
-      fecha: "2099-06-15T10:15", // 10:15 no está en SLOTS (solo :00 y :30)
+      fecha: "2099-06-15T10:15", 
       motivo: "Consulta",
     });
 
@@ -198,9 +191,8 @@ describe("POST /api/citas", () => {
   });
 });
 
-// ============================================================
-// GET /api/citas/paciente/:pacienteId
-// ============================================================
+// API Citas - PacienteId
+
 
 describe("GET /api/citas/paciente/:pacienteId", () => {
   test("CI08: devuelve las citas del paciente recién creadas", async () => {
