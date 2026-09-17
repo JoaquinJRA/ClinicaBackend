@@ -8,6 +8,8 @@ import { getCostoEspecialidad } from "../../utils/adminCatalogs.js";
 import { isValidSlotDate } from "../../utils/citaDate.js";
 import { sendCitaConfirmadaSms } from "./notificacionesCitas.service.js";
 
+const ESTADOS_VALIDOS = ["PENDIENTE", "CONFIRMADA", "CANCELADA", "ATENDIDA"];
+
 const validateFechaCitaDisponible = async ({
   medicoId,
   fechaCita,
@@ -42,6 +44,15 @@ export const createCitaService = async ({
   fecha,
   motivo,
 }) => {
+  
+  if (!pacienteId || !medicoId) {
+    throw new BadRequestError("pacienteId y medicoId son requeridos");
+  }
+
+  if (!motivo || motivo.trim() === "") {
+    throw new BadRequestError("El motivo es obligatorio");
+  }
+
   const { dbDate: fechaCita, localDate: fechaLocal } = fecha;
 
   await validateFechaCitaDisponible({
@@ -85,6 +96,9 @@ export const createCitaService = async ({
 };
 
 export const updateCitaService = async ({ id, medicoId, fecha, motivo }) => {
+    if (!motivo || motivo.trim() === "") {
+    throw new BadRequestError("El motivo es obligatorio");
+  }
   const { dbDate: fechaCita, localDate: fechaLocal } = fecha;
 
   await validateFechaCitaDisponible({
@@ -116,6 +130,9 @@ export const updateCitaService = async ({ id, medicoId, fecha, motivo }) => {
 };
 
 export const updateEstadoCitaService = async ({ id, estado }) => {
+   if (!ESTADOS_VALIDOS.includes(estado)) {
+    throw new BadRequestError("Estado no válido");
+  }
   try {
     const cita = await prisma.cita.update({
       where: { id },

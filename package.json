@@ -7,10 +7,13 @@
     "seed": "node prisma/seed.js"
   },
   "scripts": {
-    "dev": "node --watch --env-file=.env ./src/server.js",
-    "start": "node ./src/server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
+  "dev": "node --watch --env-file=.env ./src/server.js",
+  "start": "node ./src/server.js",
+  "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js",
+  "test:watch": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --watch",
+  "test:coverage": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --coverage",
+  "test:integration": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --testPathPatterns=integration"
+},
   "repository": {
     "type": "git",
     "url": "git+https://github.com/JoaquinJRA/ClinicaBackend.git"
@@ -30,11 +33,21 @@
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
-    "nodemailer": "^8.0.7",
+    "nodemailer": "^10.0.10",
     "twilio": "^6.0.2"
   },
   "devDependencies": {
     "@types/node": "^25.7.0",
-    "prisma": "^6.9.0"
+    "jest": "^30.5.1",
+    "jest-mock-extended": "^4.0.1",
+    "prisma": "^6.9.0",
+    "supertest": "^7.2.2"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "transform": {},
+    "collectCoverageFrom": [
+      "src/services/**/*.js"
+    ]
   }
 }
